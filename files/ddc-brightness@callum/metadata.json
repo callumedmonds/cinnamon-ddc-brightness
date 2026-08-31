@@ -1,0 +1,8 @@
+{
+    "uuid": "ddc-brightness@callum",
+    "name": "DDC Brightness",
+    "description": "A brightness slider for each external monitor, over DDC/CI",
+    "icon": "display-brightness-symbolic",
+    "version": "1.0.0",
+    "max-instances": 1
+}

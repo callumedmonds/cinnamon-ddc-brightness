@@ -1,0 +1,30 @@
+(set_connector_for_businfo_using_edid)           Failed to find connector name for /dev/i2c-7 using EDID 0xEDIDPTR
+Failed to find connector name for /dev/i2c-7, set_connector_for_businfo_using_edid at line 1236 in file i2c_bus_core.c. 
+   I2C_Bus_Info at: 0xEDIDPTR
+   Flags:                   I2C_BUS_EXISTS | I2C_BUS_ACCESSIBLE | I2C_BUS_PROBED | I2C_BUS_X50_EDID
+   Bus /dev/i2c-7 found:   true
+   Bus /dev/i2c-7 probed:  true
+   errno for open:          OK(0): success
+   drm_connector_found_by:  DRM_CONNECTOR_NOT_CHECKED (0)
+   last_checked_asleep:       false
+   Display connectors reported by /sys:
+(set_connector_for_businfo_using_edid)           Failed to find connector name for /dev/i2c-8 using EDID 0xEDIDPTR
+Failed to find connector name for /dev/i2c-8, set_connector_for_businfo_using_edid at line 1236 in file i2c_bus_core.c. 
+   I2C_Bus_Info at: 0xEDIDPTR
+   Flags:                   I2C_BUS_EXISTS | I2C_BUS_ACCESSIBLE | I2C_BUS_PROBED | I2C_BUS_X50_EDID
+   Bus /dev/i2c-8 found:   true
+   Bus /dev/i2c-8 probed:  true
+   errno for open:          OK(0): success
+   drm_connector_found_by:  DRM_CONNECTOR_NOT_CHECKED (0)
+   last_checked_asleep:       false
+   Display connectors reported by /sys:
+Display 1
+   I2C bus:          /dev/i2c-7
+   drm_connector_id: 0
+   Monitor:          MSI:MSI MP275:SERIAL0001
+
+Display 2
+   I2C bus:          /dev/i2c-8
+   drm_connector_id: 0
+   Monitor:          IVM:PL2730H:SERIAL0002
+
