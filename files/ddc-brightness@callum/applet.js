@@ -548,6 +548,7 @@ class DDCBrightnessApplet extends Applet.TextIconApplet {
         this.monitors = [];
         this._errorShown = false;
         this._detecting = false;
+        this._detectProc = null;
         /* Bumped whenever the monitor set is torn down, so callbacks from a
          * previous generation can recognise themselves as stale. */
         this._generation = 0;
@@ -593,7 +594,8 @@ class DDCBrightnessApplet extends Applet.TextIconApplet {
         this.menu.removeAll();
         this.menu.addMenuItem(new PopupMenu.PopupMenuItem(_("Detecting monitors…"), { reactive: false }));
 
-        run(["ddcutil", "detect", "--brief"], (stdout, exitCode) => {
+        this._detectProc = run(["ddcutil", "detect", "--brief"], (stdout, exitCode) => {
+            this._detectProc = null;
             if (generation !== this._generation) return;
             this._detecting = false;
 
@@ -734,6 +736,10 @@ class DDCBrightnessApplet extends Applet.TextIconApplet {
 
     on_applet_removed_from_panel() {
         this._generation++;   /* strands any in-flight detect callback */
+        if (this._detectProc && this._detectProc.cancellable) {
+            this._detectProc.cancellable.cancel();
+        }
+        this._detectProc = null;
         this._clearMonitors();
         this.settings.finalize();
     }
