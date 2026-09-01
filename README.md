@@ -21,7 +21,7 @@ monitors over the i2c lines in the video cable and changes the actual backlight
 
 ```bash
 sudo apt install ddcutil          # Debian/Ubuntu
-git clone https://github.com/<your-username>/cinnamon-ddc-brightness.git
+git clone https://github.com/callumedmonds/cinnamon-ddc-brightness.git
 cd cinnamon-ddc-brightness
 ./install.sh
 ```
