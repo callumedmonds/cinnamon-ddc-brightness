@@ -1,0 +1,30 @@
+/* DDC Brightness applet
+   SPDX-License-Identifier: MIT */
+
+/* Name, slider and value on one line. min-width keeps the popup from
+   collapsing around a slider, which has no natural width of its own. */
+.ddc-row {
+    spacing: 10px;
+    min-width: 320px;
+}
+
+/* Fixed columns so every row's slider starts and ends at the same x,
+   across features and across monitors. */
+.ddc-name {
+    min-width: 105px;
+}
+
+.ddc-value {
+    min-width: 64px;
+    text-align: right;
+}
+
+/* Monitor name, as a section heading above that monitor's controls. */
+.ddc-header-item {
+    padding-top: 8px;
+    padding-bottom: 2px;
+}
+
+.ddc-header {
+    font-weight: bold;
+}

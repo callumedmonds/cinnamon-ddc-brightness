@@ -13,6 +13,7 @@ const Util = imports.misc.util;
 const Main = imports.ui.main;
 const GLib = imports.gi.GLib;
 const Clutter = imports.gi.Clutter;
+const St = imports.gi.St;
 
 const UUID = "ddc-brightness@callum";
 
@@ -174,6 +175,33 @@ function parseDetect(stdout) {
     return found;
 }
 
+/* One control on one row: name, slider, current value.
+ *
+ * PopupSliderMenuItem puts its slider straight into the menu item's column
+ * layout, which leaves nowhere to right-align a trailing value. Lifting the
+ * slider out into a BoxLayout gives all three parts a single row with real
+ * alignment. The drag maths is unaffected: _moveHandle works from the
+ * slider's transformed position on the stage, not from its parent. */
+class FeatureRow extends PopupMenu.PopupSliderMenuItem {
+    constructor(name) {
+        super(0);
+
+        this.nameLabel = new St.Label({ text: name, style_class: "ddc-name" });
+        this.valueLabel = new St.Label({ text: "", style_class: "ddc-value" });
+
+        this.removeActor(this._slider);
+        const box = new St.BoxLayout({ style_class: "ddc-row" });
+        box.add(this.nameLabel, { y_align: St.Align.MIDDLE, y_fill: false });
+        box.add(this._slider, { expand: true, x_fill: true, y_fill: true });
+        box.add(this.valueLabel, { y_align: St.Align.MIDDLE, y_fill: false });
+        this.addActor(box, { span: -1, expand: true });
+    }
+
+    setValueText(text) {
+        this.valueLabel.set_text(text);
+    }
+}
+
 /* One slider bound to one VCP feature on one monitor.
  *
  * kind "continuous": the slider spans 0..max in the monitor's own units.
@@ -191,23 +219,32 @@ class FeatureSlider {
         this.max = spec.max || 100;
         this.known = false;
 
-        this.item = new PopupMenu.PopupMenuItem("", { reactive: false });
-        this.slider = new PopupMenu.PopupSliderMenuItem(0);
-        this.slider.connect("value-changed", (slider, fraction) => this._onSlider(fraction));
-        this.slider.connect("drag-begin", () => { this.monitor.dragging = true; });
+        /* Created per menu build — see addTo(). */
+        this.row = null;
+    }
+
+    /* PopupMenuBase.removeAll() destroys every item it holds, so a widget kept
+     * across a menu rebuild comes back destroyed and silently adds nothing.
+     * The menu owns the row; this object owns only the state. */
+    addTo(menu) {
+        this.row = new FeatureRow(this.name);
+        this.row.connect("value-changed", (row, fraction) => this._onSlider(fraction));
+        this.row.connect("drag-begin", () => { this.monitor.dragging = true; });
         /* Committing on drag-end means letting go always lands the exact value
          * under the handle, even if the last motion event was rate-limited away. */
-        this.slider.connect("drag-end", () => {
+        this.row.connect("drag-end", () => {
             this.monitor.dragging = false;
             this.monitor.flush();
         });
 
-        this._updateLabel();
+        this.row.setValue(this.fraction());
+        this.row.setValueText(this.display());
+        menu.addMenuItem(this.row);
     }
 
-    addTo(menu) {
-        menu.addMenuItem(this.item);
-        menu.addMenuItem(this.slider);
+    /* The menu has destroyed our row; drop the dangling reference. */
+    forgetWidget() {
+        this.row = null;
     }
 
     _choiceIndex() {
@@ -227,7 +264,7 @@ class FeatureSlider {
     }
 
     _updateLabel() {
-        this.item.label.set_text(this.name + "   " + this.display());
+        if (this.row) this.row.setValueText(this.display());
     }
 
     fraction() {
@@ -256,7 +293,7 @@ class FeatureSlider {
                         (!this.monitor.dragging && !this.monitor.hasPendingWrite(this.code))) {
                         this.value = parsed.value;
                         this.known = true;
-                        this.slider.setValue(this.fraction());
+                        if (this.row) this.row.setValue(this.fraction());
                         this._updateLabel();
                     }
                     ok = true;
@@ -300,15 +337,14 @@ class FeatureSlider {
         if (target === this.value) return;
 
         this.value = target;
-        this.slider.setValue(this.fraction());
+        if (this.row) this.row.setValue(this.fraction());
         this._updateLabel();
         this.monitor.applet.updatePanel();
         this.monitor.requestWrite(this.code, this._wireValue(target));
     }
 
     destroy() {
-        this.slider.destroy();
-        this.item.destroy();
+        this.forgetWidget();
     }
 }
 
@@ -333,7 +369,7 @@ class MonitorControl {
         this.probed = false;
         this.probing = false;
 
-        this.header = new PopupMenu.PopupMenuItem(model, { reactive: false });
+        this.header = null;   /* created per menu build, like the feature rows */
 
         this._writes = new Map();     /* code -> wire value; latest wins per code */
         this._writingCode = null;
@@ -349,8 +385,19 @@ class MonitorControl {
     }
 
     addTo(menu) {
+        this.header = new PopupMenu.PopupBaseMenuItem({ reactive: false, style_class: "ddc-header-item" });
+        this.header.addActor(new St.Label({ text: this.model, style_class: "ddc-header" }),
+                             { span: -1, expand: true });
         menu.addMenuItem(this.header);
         this.features().forEach((f) => f.addTo(menu));
+    }
+
+    /* Called right after the menu is cleared: every widget below is already
+     * destroyed, so only the references need dropping. */
+    forgetWidgets() {
+        this.header = null;
+        this.brightness.forgetWidget();
+        this.advancedFeatures.forEach((f) => f.forgetWidget());
     }
 
     readAll(done) {
@@ -525,7 +572,7 @@ class MonitorControl {
         this.brightness.destroy();
         this.advancedFeatures.forEach((f) => f.destroy());
         this.advancedFeatures = [];
-        this.header.destroy();
+        this.header = null;
     }
 }
 
@@ -568,6 +615,13 @@ class DDCBrightnessApplet extends Applet.TextIconApplet {
         this.detect();
     }
 
+    /* The only way the menu should ever be emptied: removeAll() destroys the
+     * items, so the monitors must drop their references in the same breath. */
+    _clearMenu() {
+        this.menu.removeAll();
+        this.monitors.forEach((m) => m.forgetWidgets());
+    }
+
     on_applet_clicked() {
         this.menu.toggle();
     }
@@ -590,8 +644,8 @@ class DDCBrightnessApplet extends Applet.TextIconApplet {
         this._generation++;
         const generation = this._generation;
 
+        this._clearMenu();
         this._clearMonitors();
-        this.menu.removeAll();
         this.menu.addMenuItem(new PopupMenu.PopupMenuItem(_("Detecting monitors…"), { reactive: false }));
 
         this._detectProc = run(["ddcutil", "detect", "--brief"], (stdout, exitCode) => {
@@ -635,7 +689,7 @@ class DDCBrightnessApplet extends Applet.TextIconApplet {
     }
 
     rebuildMenu() {
-        this.menu.removeAll();
+        this._clearMenu();
 
         this.monitors.forEach((m, i) => {
             if (i > 0) this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
@@ -682,7 +736,7 @@ class DDCBrightnessApplet extends Applet.TextIconApplet {
         }
 
         const generation = this._generation;
-        this.menu.removeAll();
+        this._clearMenu();
         this.menu.addMenuItem(new PopupMenu.PopupMenuItem(_("Reading monitor capabilities…"), { reactive: false }));
 
         this._probeAll(generation, () => {
@@ -693,7 +747,7 @@ class DDCBrightnessApplet extends Applet.TextIconApplet {
     }
 
     _showMessage(text) {
-        this.menu.removeAll();
+        this._clearMenu();
         this.menu.addMenuItem(new PopupMenu.PopupMenuItem(text, { reactive: false }));
         const retry = new PopupMenu.PopupMenuItem(_("Rescan monitors"));
         retry.connect("activate", () => this.detect());
@@ -740,6 +794,7 @@ class DDCBrightnessApplet extends Applet.TextIconApplet {
             this._detectProc.cancellable.cancel();
         }
         this._detectProc = null;
+        this._clearMenu();
         this._clearMonitors();
         this.settings.finalize();
     }

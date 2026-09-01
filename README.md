@@ -65,6 +65,11 @@ Switch on **Advanced** in the menu and each monitor also gets:
   monitor from its own capabilities. Named modes like "User 1" are left out,
   since they have no place on a temperature axis.
 
+Moving the colour-temperature slider switches the monitor to that preset, which
+takes it **out of any "User" mode** and discards a custom white balance you set
+from its OSD. If a monitor is currently in User 1 and you want it back after
+experimenting, `ddcutil --bus <N> setvcp 14 0x0b` restores it.
+
 Both are discovered per monitor rather than assumed: contrast is probed
 directly (capabilities strings are routinely under-reported by vendors) and the
 preset list is read from `ddcutil capabilities`. A monitor that doesn't support
@@ -73,6 +78,10 @@ a few seconds per monitor to ask.
 
 Scrolling deliberately only moves brightness — stepping a colour preset on a
 stray wheel notch would be an unpleasant surprise.
+
+The menu puts each control on one row — name, slider, current value — with the
+columns aligned across every feature and every monitor, under a heading per
+monitor.
 
 ## Settings
 
