@@ -1,7 +1,8 @@
 # DDC Brightness
 
 A Cinnamon applet that puts a brightness slider for **each external monitor**
-in your panel, driven over DDC/CI by [`ddcutil`](https://www.ddcutil.com/).
+in your panel — plus one that sets them all at once — driven over DDC/CI by
+[`ddcutil`](https://www.ddcutil.com/).
 An **Advanced** toggle adds contrast and colour-temperature sliders for the
 monitors that support them.
 
@@ -53,8 +54,16 @@ ddcutil detect
 
 ## Controls
 
-Click the panel icon for a slider per monitor. Scrolling on the panel icon
-adjusts brightness on every monitor at once.
+Click the panel icon for a slider per monitor. With more than one monitor
+attached, an **All monitors** slider sits above them:
+
+- **Dragging All monitors** puts every monitor at the same level. Its value
+  reads `60%` when the monitors agree and `40–60%` when they don't, with the
+  handle at their average — so the first drag after setting them apart brings
+  them back together.
+- **Scrolling on the panel icon** moves every monitor by the scroll step while
+  keeping any gap between them. Use this if you've matched two panels by eye
+  at different settings and want to keep them matched.
 
 Switch on **Advanced** in the menu and each monitor also gets:
 
@@ -81,7 +90,7 @@ stray wheel notch would be an unpleasant surprise.
 
 The menu puts each control on one row — name, slider, current value — with the
 columns aligned across every feature and every monitor, under a heading per
-monitor.
+monitor, with the All monitors row above them all.
 
 ## Settings
 

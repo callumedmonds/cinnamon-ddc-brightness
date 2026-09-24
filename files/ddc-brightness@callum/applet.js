@@ -1,7 +1,8 @@
 /*
  * DDC Brightness — a Cinnamon applet giving each external monitor its own
- * brightness slider, driven over DDC/CI by ddcutil. An "Advanced" toggle adds
- * contrast and colour-temperature sliders for the monitors that support them.
+ * brightness slider, plus one that sets them all together, driven over DDC/CI
+ * by ddcutil. An "Advanced" toggle adds contrast and colour-temperature
+ * sliders for the monitors that support them.
  *
  * SPDX-License-Identifier: MIT
  */
@@ -322,6 +323,13 @@ class FeatureSlider {
         this.monitor.requestWrite(this.code, this._wireValue(value));
     }
 
+    /* The all-monitors row drives this slider as if its own handle had been
+     * dragged — except this handle is not under the pointer, so move it. */
+    setFraction(fraction) {
+        this._onSlider(fraction);
+        if (this.row) this.row.setValue(this.fraction());
+    }
+
     /* Enumerated features take a hex MCCS value; continuous ones a decimal. */
     _wireValue(value) {
         return this.kind === "enum" ? "0x" + value.toString(16) : String(value);
@@ -345,6 +353,72 @@ class FeatureSlider {
 
     destroy() {
         this.forgetWidget();
+    }
+}
+
+/* One brightness slider for every monitor at once.
+ *
+ * Dragging it puts every monitor at the same level, as `mon-brightness 60`
+ * does. The handle rests at the mean, so if the monitors have been set apart
+ * the first drag brings them back together; scrolling on the panel icon is the
+ * way to move them all while keeping the gap. Writes still go through each
+ * monitor's own queue, so the one-process-per-bus rule holds. */
+class AllMonitorsSlider {
+    constructor(applet) {
+        this.applet = applet;
+        this.dragging = false;
+        this.row = null;   /* created per menu build, like the feature rows */
+    }
+
+    addTo(menu) {
+        this.row = new FeatureRow(_("All monitors"));
+        this.row.connect("value-changed", (row, fraction) => {
+            this.applet.monitors.forEach((m) => m.brightness.setFraction(fraction));
+        });
+        this.row.connect("drag-begin", () => {
+            this.dragging = true;
+            this.applet.monitors.forEach((m) => { m.dragging = true; });
+        });
+        this.row.connect("drag-end", () => {
+            this.dragging = false;
+            this.applet.monitors.forEach((m) => {
+                m.dragging = false;
+                m.flush();
+            });
+            this.sync();
+        });
+
+        this.sync();
+        menu.addMenuItem(this.row);
+    }
+
+    forgetWidget() {
+        this.row = null;
+    }
+
+    /* Mirrors the monitors' levels: "60%" when they agree, "40–60%" when they
+     * don't. The handle is left alone mid-drag — it belongs to the pointer,
+     * and per-monitor rounding would only make it jitter. */
+    sync() {
+        if (!this.row) return;
+
+        const known = this.applet.monitors
+            .map((m) => m.brightness)
+            .filter((b) => b.known);
+        if (known.length === 0) {
+            this.row.setValueText("…");
+            return;
+        }
+
+        const fractions = known.map((b) => b.fraction());
+        const percents = fractions.map((f) => Math.round(f * 100));
+        const lo = Math.min(...percents);
+        const hi = Math.max(...percents);
+
+        if (!this.dragging) {
+            this.row.setValue(fractions.reduce((a, b) => a + b, 0) / fractions.length);
+        }
+        this.row.setValueText(lo === hi ? lo + "%" : lo + "–" + hi + "%");
     }
 }
 
@@ -593,6 +667,7 @@ class DDCBrightnessApplet extends Applet.TextIconApplet {
         this.settings.bind("advanced", "advanced", () => this._onAdvancedSetting());
 
         this.monitors = [];
+        this.allMonitors = new AllMonitorsSlider(this);
         this._errorShown = false;
         this._detecting = false;
         this._detectProc = null;
@@ -619,6 +694,7 @@ class DDCBrightnessApplet extends Applet.TextIconApplet {
      * items, so the monitors must drop their references in the same breath. */
     _clearMenu() {
         this.menu.removeAll();
+        this.allMonitors.forgetWidget();
         this.monitors.forEach((m) => m.forgetWidgets());
     }
 
@@ -691,6 +767,12 @@ class DDCBrightnessApplet extends Applet.TextIconApplet {
     rebuildMenu() {
         this._clearMenu();
 
+        /* With a single monitor it would just duplicate that monitor's row. */
+        if (this.monitors.length > 1) {
+            this.allMonitors.addTo(this.menu);
+            this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        }
+
         this.monitors.forEach((m, i) => {
             if (i > 0) this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
             m.addTo(this.menu);
@@ -757,7 +839,11 @@ class DDCBrightnessApplet extends Applet.TextIconApplet {
         this.updatePanel();
     }
 
+    /* Runs after every brightness change, however it came about, so the
+     * all-monitors row is kept current from here too. */
     updatePanel() {
+        this.allMonitors.sync();
+
         const levels = this.monitors
             .filter((m) => m.brightness.known)
             .map((m) => Math.round((m.brightness.value / m.brightness.max) * 100));
